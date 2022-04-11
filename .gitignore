@@ -127,3 +127,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Program generated files
+*.db
+last_insert.txt
+lol_path.txt

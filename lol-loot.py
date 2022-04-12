@@ -34,37 +34,74 @@ champions_amounts = {
     "7800":0,
 }
 
-file = "lol_path.txt"
-insertfile = "last_insert.txt"
+history = "lol_progress.json"
 
 def set_path(file):
     """
     Set League of Legends installation path
     """
-    with open(file, "w") as f:
+    with open(file, "r+") as f:
         path = input("Input path to League of Legends installation directory: ")
-        f.write(path)
+        # Convert to fit JSON
+        path = path.replace("\\", "/")
+        # Parse JSON and dump path
+        obj = json.load(f)
+        obj["path"] = path
+        f.seek(0)
+        json.dump(obj, f)
 
 def get_path(file):
     """
     Get League of Legends installation path
     """
     with open(file, "r") as f:
-        x = f.read()
-        print("path: " + x)
-        return x
+        obj = json.load(f)
+        return obj["path"]
 
-def set_last_insert(insertfile):
-    with open(insertfile, "w") as f:
-        f.write(str(int(time.time())))
+def set_last_insert(file):
+    """
+    Set timestamp of last database insert
+    """
+    with open(file, "r+") as f:
+        obj = json.load(f)
+        json_array = obj["times"]
 
-def get_last_insert(insertfile):
-    with open(insertfile, "r") as f:
-        x = f.read()
-        print("last: " + x)
-        return int(x)
+        # If no entries in array
+        if len(json_array) == 0:
+            json_array.append({"accountId": meme["player"]["accountId"], "time": int(time.time())})
+        else:
+            # Loop over entries
+            for json_object in json_array:
+
+                # If entry contains current accountId
+                if json_object["accountId"] == meme["player"]["accountId"]:
+                    # Update time and dump
+                    json_object["time"] = int(time.time())
+                    f.seek(0)
+                    json.dump(json_array, f)
+                    return
+
+            # Account not in file, append it
+            json_array.append({"accountId": meme["player"]["accountId"], "time": int(time.time())})
+        # Set array as value and dump
+        obj["times"] = json_array
+        f.seek(0)
+        json.dump(obj, f)
+
+def get_last_insert(file):
+    """
+    Get timestamp of last database insert
+    """
+    with open(file, "r") as f:
+        json_array = json.load(f)["times"]
+        for json_object in json_array:
+            if json_object["accountId"] == meme["player"]["accountId"]:
+                return int(json_object["time"])
 
 def check_entry(last):
+    """
+    Checks if enough time has passed after last insert
+    """
     now = int(time.time())
     delta = now - last
     if delta >= 86400:
@@ -232,52 +269,44 @@ def insert_data(conn, data):
     cursor.execute(sql, data)
     conn.commit()
     cursor.close()
-    set_last_insert(insertfile)
+    set_last_insert(history)
     print("Data inserted to database")
 
     return cursor.lastrowid
 
-def create_path(file):
-    try:
-        f = open(file, "x")
-        f.close()
-    except FileExistsError:
-        print("Path file exists")
-    else:
-        with open(file, "w") as f:
-            f.write(r"C:\Riot Games\League of Legends")
-
 def create_insertfile(file):
+    """
+    Create file containing League of Legends installation path and timestamps for last insert of each account
+    """
     try:
         f = open(file, "x")
         f.close()
     except FileExistsError:
-        print("Timestamp file exists")
+        return
     else:
-        with open(file, "w") as f:
-            f.write(r"0")
+        with open(file, "r+") as f:
+            f.write(r'{"path": "C:/Riot Games/League of Legends", "times": []}')
 
 def main():
     url = "https://127.0.0.1:"
-    create_path(file)
-    create_insertfile(insertfile)
+    create_insertfile(history)
     try:
-        lockfile_path = get_path(file)
+        lockfile_path = get_path(history)
         if lockfile_path == "":
-            print("Empty path file")
-            set_path(file)
+            print("Empty path")
+            set_path(history)
             main()
     except (FileNotFoundError, IndexError):
         print("Path file does not exist")
-        set_path(file)
+        set_path(history)
         main()
 
     try:
-        with open(lockfile_path + r"\lockfile", "r") as f:
+        with open(lockfile_path + r"/lockfile", "r") as f:
             data = f.read()
     except (FileNotFoundError, OSError):
-        print("Incorrect path or client not open")
-        set_path(file)
+        print("Incorrect path or League of Legends client not open")
+        set_path(history)
         main()
     else:
         data = data.split(":")
@@ -292,8 +321,12 @@ def main():
         print(meme)
 
         conn = create_connection("lol_account_progression.db")
+        last = get_last_insert(history)
+        # If first time
+        if last == None:
+            last = 0
         with conn:
-            if check_entry(get_last_insert(insertfile)):
+            if check_entry(last):
                 data = (meme["player"]["accountId"], int(time.time()), meme["player"]["summonerLevel"], meme["player"]["current_be"], meme["champions"]["total"], meme["champions"]["owned"], meme["champions"]["unique_shards"], meme["cost_unowned_be"], meme["cost_missing_shard_be"], meme["disenchant_duplicates"])
                 insert_data(conn, data)
 
@@ -315,7 +348,6 @@ def main():
         print("Missing " + str(get_be_needed()) + " BE to purchase all champions")
 
         conn.close()
-        print("connection closed")
 
 if __name__ == "__main__":
     main()

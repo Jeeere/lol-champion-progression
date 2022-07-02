@@ -9,7 +9,6 @@ import time
 # Addresses for needed tabs
 loot_addr = "/lol-loot/v1/player-loot"
 store_addr = "/lol-store/v1/champions"
-
 # Initialize output dictionary
 meme = {
     "player":{
@@ -21,10 +20,8 @@ meme = {
         "unique_shards":0
     }
 }
-
 # Initialize list for unowned champion shards
 unowned_shards = []
-
 champions_amounts = {
     "450":0,
     "1350":0,
@@ -33,60 +30,74 @@ champions_amounts = {
     "6300":0,
     "7800":0,
 }
-
 history = "lol_progress.json"
+
 
 def set_path(file):
     """
     Set League of Legends installation path
     """
-    with open(file, "r+") as f:
-        path = input("Input path to League of Legends installation directory: ")
-        # Convert to fit JSON
-        path = path.replace("\\", "/")
-        # Parse JSON and dump path
+    path = input("Input path to League of Legends installation directory: ")
+    # Convert to fit JSON
+    path = path.replace("\\", "/")
+
+    with open(file, "r") as f:
+        # Parse JSON
         obj = json.load(f)
-        obj["path"] = path
-        f.seek(0)
+
+    obj["path"] = path
+
+    with open(file, "w") as f:
+        # Dump updated JSON
         json.dump(obj, f)
+
 
 def get_path(file):
     """
     Get League of Legends installation path
     """
     with open(file, "r") as f:
-        obj = json.load(f)
-        return obj["path"]
+        try:
+            obj = json.load(f)
+            return obj["path"]
+        except json.decoder.JSONDecodeError as e:
+            print("Error decoding history!")
+            print(e)
+
 
 def set_last_insert(file):
     """
     Set timestamp of last database insert
     """
-    with open(file, "r+") as f:
+    with open(file, "r") as f:
         obj = json.load(f)
-        json_array = obj["times"]
 
-        # If no entries in array
-        if len(json_array) == 0:
-            json_array.append({"accountId": meme["player"]["accountId"], "time": int(time.time())})
-        else:
-            # Loop over entries
-            for json_object in json_array:
+    json_array = obj["times"]
 
-                # If entry contains current accountId
-                if json_object["accountId"] == meme["player"]["accountId"]:
-                    # Update time and dump
-                    json_object["time"] = int(time.time())
-                    f.seek(0)
-                    json.dump(json_array, f)
-                    return
+    # If no entries in array
+    if len(json_array) == 0:
+        json_array.append({"accountId": meme["player"]["accountId"], "time": int(time.time())})
+    else:
+        # Loop over entries
+        for json_object in json_array:
 
-            # Account not in file, append it
-            json_array.append({"accountId": meme["player"]["accountId"], "time": int(time.time())})
-        # Set array as value and dump
+            # If entry contains current accountId
+            if json_object["accountId"] == meme["player"]["accountId"]:
+                # Update time and dump
+                json_object["time"] = int(time.time())
+                
+                with open(file, "w") as f:
+                    obj["times"] = json_array
+                    json.dump(obj, f)
+                return
+
+        # Account not in file, append it
+        json_array.append({"accountId": meme["player"]["accountId"], "time": int(time.time())})
+    # Set array as value and dump
+    with open(file, "w") as f:
         obj["times"] = json_array
-        f.seek(0)
         json.dump(obj, f)
+
 
 def get_last_insert(file):
     """
@@ -97,6 +108,7 @@ def get_last_insert(file):
         for json_object in json_array:
             if json_object["accountId"] == meme["player"]["accountId"]:
                 return int(json_object["time"])
+
 
 def check_entry(last):
     """
@@ -109,6 +121,7 @@ def check_entry(last):
     else:
         print("Less than one day from last insert. Not inserting data.")
         return False
+
 
 def loot(url, credentials):
     """
@@ -139,6 +152,7 @@ def loot(url, credentials):
                 meme["disenchant_duplicates"] = meme.get("disenchant_duplicates", 0) + (json_object["count"] * json_object["disenchantValue"])
 
     return True
+
 
 def store(url, credentials):
     """
@@ -183,6 +197,7 @@ def store(url, credentials):
     
     return True
 
+
 def get_be_needed():
     """
     Calculate BE required to purchase all champions
@@ -191,6 +206,7 @@ def get_be_needed():
     missing = total_cost - (meme["player"]["current_be"] + meme["disenchant_duplicates"])
 
     return missing
+
 
 def get_rnd_champ_value():
     """
@@ -222,6 +238,7 @@ def get_champions_per_value(cost):
 
     return True
 
+
 def create_connection(db_file):
     """
     create a database connection to a SQLite database
@@ -239,13 +256,14 @@ def create_connection(db_file):
             ACCOUNT INTEGER NOT NULL,
             TIMESTAMP INTEGER NOT NULL,
             LEVEL INTEGER,
-            BLUE_ESSENCE INTEGER,
             TOTAL_CHAMPIONS INTEGER,
             OWNED_CHAMPIONS INTEGER,
             UNIQUE_CHAMPION_SHARDS INTEGER,
+            BLUE_ESSENCE INTEGER,
+            DISENCHANT_DUPLICATES INTEGER,
             COST_UNOWNED INTEGER,
             COST_MISSING_SHARD INTEGER,
-            DISENCHANT_DUPLICATES INTEGER,
+            COST_UPGRADE INTEGER,
             PRIMARY KEY (ACCOUNT, TIMESTAMP)
             )'''
 
@@ -255,15 +273,16 @@ def create_connection(db_file):
 
         return conn
 
+
 def insert_data(conn, data):
     """
     Insert data into db
     """
     sql = '''
         INSERT INTO PROGRESSION(
-        ACCOUNT, TIMESTAMP, LEVEL, BLUE_ESSENCE, TOTAL_CHAMPIONS, OWNED_CHAMPIONS, UNIQUE_CHAMPION_SHARDS, COST_UNOWNED, COST_MISSING_SHARD, DISENCHANT_DUPLICATES
+        ACCOUNT, TIMESTAMP, LEVEL, TOTAL_CHAMPIONS, OWNED_CHAMPIONS, UNIQUE_CHAMPION_SHARDS, BLUE_ESSENCE, DISENCHANT_DUPLICATES, COST_UNOWNED, COST_MISSING_SHARD, COST_UPGRADE
         ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )'''
     cursor = conn.cursor()
     cursor.execute(sql, data)
@@ -273,6 +292,7 @@ def insert_data(conn, data):
     print("Data inserted to database")
 
     return cursor.lastrowid
+
 
 def create_insertfile(file):
     """
@@ -287,6 +307,7 @@ def create_insertfile(file):
         with open(file, "r+") as f:
             f.write(r'{"path": "C:/Riot Games/League of Legends", "times": []}')
 
+
 def main():
     url = "https://127.0.0.1:"
     create_insertfile(history)
@@ -296,7 +317,7 @@ def main():
             print("Empty path")
             set_path(history)
             main()
-    except (FileNotFoundError, IndexError):
+    except (FileNotFoundError, IndexError, json.decoder.JSONDecodeError):
         print("Path file does not exist")
         set_path(history)
         main()
@@ -327,7 +348,7 @@ def main():
             last = 0
         with conn:
             if check_entry(last):
-                data = (meme["player"]["accountId"], int(time.time()), meme["player"]["summonerLevel"], meme["player"]["current_be"], meme["champions"]["total"], meme["champions"]["owned"], meme["champions"]["unique_shards"], meme["cost_unowned_be"], meme["cost_missing_shard_be"], meme["disenchant_duplicates"])
+                data = (meme["player"]["accountId"], int(time.time()), meme["player"]["summonerLevel"], meme["champions"]["total"], meme["champions"]["owned"], meme["champions"]["unique_shards"], meme["player"]["current_be"], meme["disenchant_duplicates"], meme["cost_unowned_be"], meme["cost_missing_shard_be"], meme["total_upgrade_cost"])
                 insert_data(conn, data)
 
         print("Random champion shard average value: " + str(get_rnd_champ_value()))
@@ -348,6 +369,7 @@ def main():
         print("Missing " + str(get_be_needed()) + " BE to purchase all champions")
 
         conn.close()
+
 
 if __name__ == "__main__":
     main()

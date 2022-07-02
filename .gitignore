@@ -130,7 +130,5 @@ dmypy.json
 
 # Program generated files
 *.db
-last_insert.txt
-lol_path.txt
-history.json
-lol_progress.json
+*.json
+*.bat

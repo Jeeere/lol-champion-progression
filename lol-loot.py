@@ -18,7 +18,8 @@ meme = {
         "total":0,
         "owned":0,
         "unique_shards":0
-    }
+    },
+    "total_upgrade_cost": 0
 }
 # Initialize list for unowned champion shards
 unowned_shards = []
